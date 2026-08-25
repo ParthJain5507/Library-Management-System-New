@@ -12,6 +12,12 @@ struct Book {
     std::string title;
     std::string author;
 };
+// User ka structure
+struct User {
+    std::string username;
+    std::string password;
+    std::string token;
+};
 
 int main() {
     crow::SimpleApp app;
@@ -20,6 +26,9 @@ int main() {
     // Dummy books
     library.push_back({1, "C++ Programming", "Bjarne Stroustrup"});
     library.push_back({2, "Clean Code", "Robert C. Martin"});
+    std::vector<User> users;
+    // Ek dummy admin account banate hain
+    users.push_back({"admin", "admin123", "secret-admin-token"});
 
     // 1. GET Route
     CROW_ROUTE(app, "/books").methods(crow::HTTPMethod::GET)([&library](){
@@ -32,8 +41,15 @@ int main() {
         return x;
     });
 
-    // 2. POST Route
+    // 2. POST Route: Nayi book add karne ke liye (Ab Secured Hai)
     CROW_ROUTE(app, "/books").methods(crow::HTTPMethod::POST)([&library](const crow::request& req){
+        
+        // 🔒 SECURITY CHECK: Token check kar rahe hain
+        auto auth_header = req.get_header_value("Authorization");
+        if (auth_header != "secret-admin-token") {
+            return crow::response(401, "Unauthorized! Sirf Admin books add kar sakta hai.");
+        }
+
         auto x = crow::json::load(req.body);
         if (!x) return crow::response(400, "Invalid JSON");
         
@@ -86,6 +102,26 @@ int main() {
             }
         }
         return crow::response(404, "Book not found!");
+    });
+    // 6. LOGIN Route: Username/Password check karke Token dena
+    CROW_ROUTE(app, "/login").methods(crow::HTTPMethod::POST)([&users](const crow::request& req){
+        auto x = crow::json::load(req.body);
+        if (!x || !x.has("username") || !x.has("password")) {
+            return crow::response(400, "Username aur password zaroori hai!");
+        }
+
+        std::string uname = x["username"].s();
+        std::string pwd = x["password"].s();
+
+        for (const auto& u : users) {
+            if (u.username == uname && u.password == pwd) {
+                crow::json::wvalue res;
+                res["message"] = "Login successful!";
+                res["token"] = u.token; // Admin ko token de rahe hain
+                return crow::response(200, res);
+            }
+        }
+        return crow::response(401, "Galat Username ya Password!");
     });
 
     app.port(8080).multithreaded().run();
